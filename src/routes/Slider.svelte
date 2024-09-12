@@ -10,6 +10,7 @@
 
     function handleInputChange(event) {
         value = event.target.value;
+        dispatch('input', { id, value }); // Dispatch the value immediately on input change
     }
 
     function handleSliderRelease() {
@@ -34,7 +35,7 @@
         id={id}
         min={min}
         max={max}
-        value={value}
+        bind:value
         on:input={handleInputChange}
         on:change={handleSliderRelease}
     />

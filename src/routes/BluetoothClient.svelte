@@ -1,64 +1,61 @@
 <script>
-    import { onMount } from 'svelte';
-    import Slider from './Slider.svelte';
+    import { onMount, setContext, createEventDispatcher } from 'svelte';
+    import { writable } from 'svelte/store';
 
     let device = null;
     let server = null;
-    let txCharacteristic = null;
-
-    const DEVICE_NAME = 'BBC micro:bit [tupiv]';
+    const DEVICE_NAME = 'BBC micro:bit [tupiv]'; // Your device name
     const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
-    // const TX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
-    const TX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+    const dispatch = createEventDispatcher();
+
+    // Provide the service context to child components
+
+
+    let service = writable()
+
+    setContext('bluetoothService', service);
+
     async function connectToDevice() {
         try {
-            console.log('Requesting Bluetooth device...');
+            console.log('Requesting Bluetooth Device...');
             device = await navigator.bluetooth.requestDevice({
                 filters: [{ name: DEVICE_NAME }],
                 optionalServices: [UART_SERVICE_UUID]
             });
 
-            console.log('Connecting to GATT server...');
+            console.log('Connecting to GATT Server...');
             server = await device.gatt.connect();
-            console.log('Connection status:', device.gatt.connected);
 
-            console.log('Getting UART service...');
-            const service = await server.getPrimaryService(UART_SERVICE_UUID);
+            console.log('Getting Primary Service...');
+            $service = await server.getPrimaryService(UART_SERVICE_UUID);
 
-            console.log('Getting TX characteristic...');
-            txCharacteristic = await service.getCharacteristic(TX_CHAR_UUID);
+            // Dispatch an event to indicate connection success
+            dispatch('connected', { connected: true });
 
-            console.log('Connected');
+            console.log('Connected to Bluetooth Device');
         } catch (error) {
             console.error('Error:', error);
         }
     }
 
-    function handleSliderRelease(event) {
-        if (!txCharacteristic) {
-            console.log('Not connected');
-            return;
-        }
+    async function disconnectFromDevice() {
+        if (device && device.gatt.connected) {
+            console.log('Disconnecting from device...');
+            device.gatt.disconnect();
+            device = null;
+            server = null;
+            service = null;
 
-        const { id, value } = event.detail;
-        const message = `$${id}:${value}#`;
-        const byteArray = new TextEncoder().encode(message);
+            // Dispatch an event to indicate disconnection
+            dispatch('connected', { connected: false });
 
-        // Adjust chunk size based on the MTU
-        const mtu = 20;
-        const chunkSize = mtu;
-
-        for (let i = 0; i < byteArray.length; i += chunkSize) {
-            const chunk = byteArray.slice(i, i + chunkSize);
-            txCharacteristic.writeValueWithoutResponse(chunk)
-                .then(() => {
-                    console.log(`Sent: ${message}`);
-                })
-                .catch(error => {
-                    console.error('Error writing characteristic:', error);
-                });
+            console.log('Disconnected from Bluetooth Device');
         }
     }
+
+    onMount(() => {
+        // Handle any logic that should run when the component mounts
+    });
 </script>
 
 <style>
@@ -68,9 +65,8 @@
 </style>
 
 <div>
+    <!-- Button to trigger Bluetooth connection -->
     <button on:click={connectToDevice}>Connect to Bluetooth Device</button>
-    
-    <!-- Slider Components -->
-    <Slider id="slider1" min="0" max="100" on:release={handleSliderRelease} />
-    <Slider id="slider2" min="0" max="100" on:release={handleSliderRelease} />
+    <button on:click={disconnectFromDevice}>Disconnect</button>
+    <slot></slot>
 </div>

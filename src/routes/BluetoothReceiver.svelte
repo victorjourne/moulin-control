@@ -1,67 +1,66 @@
 <script>
-    import { onMount } from 'svelte';
+    import { getContext } from 'svelte';
+    import { writable } from 'svelte/store';
 
-    let device = null;
-    let server = null;
+    let service;
     let rxCharacteristic = null;
-    let receivedMessages = [];
-
-    const DEVICE_NAME = 'BBC micro:bit [tupiv]';
-    const UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
     const RX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
 
-    onMount(() => {
-        connectToDevice();
-    });
+    // Create a Svelte store to hold the received value
+    const receivedValue = writable('');
 
-    async function connectToDevice() {
+    // Retrieve the Bluetooth service from context
+    service = getContext('bluetoothService');
+
+    // Function to handle incoming data
+    function handleValueChanged(event) {
+        const value = new TextDecoder().decode(event.target.value);
+        console.log('Received:', value);
+        receivedValue.set(value);  // Update the store with the received value
+    }
+
+
+    const listen = async (service) => {
         try {
-            console.log('Requesting Bluetooth device...');
-            device = await navigator.bluetooth.requestDevice({
-                filters: [{ name: DEVICE_NAME }],
-                optionalServices: [UART_SERVICE_UUID]
-            });
+            if (service) {
+                // Get the RX characteristic from the service
+                rxCharacteristic = await service.getCharacteristic(RX_CHAR_UUID);
 
-            console.log('Connecting to GATT server...');
-            server = await device.gatt.connect();
-            console.log('Connection status:', device.gatt.connected);
+                // Add event listener for characteristic value changes
+                rxCharacteristic.addEventListener('characteristicvaluechanged', handleValueChanged);
 
-            console.log('Getting UART service...');
-            const service = await server.getPrimaryService(UART_SERVICE_UUID);
+                // Start notifications so the characteristic can send updates
+                await rxCharacteristic.startNotifications();
 
-            console.log('Getting RX characteristic...');
-            rxCharacteristic = await service.getCharacteristic(RX_CHAR_UUID);
-
-            // Enable notifications
-            await rxCharacteristic.startNotifications();
-            rxCharacteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
-
-            console.log('Connected and listening for notifications');
+                console.log('Notifications started for RX characteristic');
+            } else {
+                console.error('Bluetooth service not available.');
+            }
         } catch (error) {
-            console.error('Error:', error);
+            console.error('Error initializing BluetoothReceiver:', error);
         }
     }
 
-    function handleCharacteristicValueChanged(event) {
-        const value = event.target.value;
-        const decodedValue = new TextDecoder().decode(value);
-
-        console.log('Received value:', decodedValue);
-        receivedMessages = [...receivedMessages, decodedValue];
+    $: {
+        listen($service)
     }
 </script>
 
+<!-- Display the received value in the UI -->
+<div>
+    <h3>Received Data</h3>
+    <p>{$receivedValue}</p>
+</div>
+
 <style>
-    .message {
-        margin: 5px 0;
-        padding: 5px;
-        border-bottom: 1px solid #ccc;
+    div {
+        margin-top: 20px;
+    }
+    h3 {
+        font-size: 1.2em;
+    }
+    p {
+        font-family: monospace;
+        color: #333;
     }
 </style>
-
-<div>
-    <h2>Received Messages</h2>
-    {#each receivedMessages as message}
-        <div class="message">{message}</div>
-    {/each}
-</div>
